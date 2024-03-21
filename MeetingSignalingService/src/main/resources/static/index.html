@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
+    <title>Spring Boot WebSocket Chat Application</title>
+    <link rel="stylesheet" href="/css/main.css"/>
+</head>
+<body>
+<noscript>
+    <h2>Sorry! Your browser doesn't support Javascript</h2>
+</noscript>
+
+<div id="username-page">
+    <div class="username-page-container">
+        <h1 class="title">Type your username and room ID to enter the Chatroom</h1>
+        <form id="usernameForm" name="usernameForm">
+            <div class="form-group">
+                <input type="text" id="name" placeholder="Username" autocomplete="off" class="form-control"/>
+            </div>
+            <div class="form-group">
+                <input type="text" id="roomID" placeholder="Room ID" autocomplete="off" class="form-control"/>
+            </div>
+            <div class="form-group">
+                <button type="submit" class="accent username-submit">Start Chatting</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="chat-page" class="hidden">
+    <div class="chat-container">
+        <div class="chat-header">
+            <h2>Spring WebSocket Chat Demo - By Alibou</h2>
+        </div>
+        <div id="video-container">
+            <video id="localVideo" autoplay muted></video>
+            <video id="remoteVideo" autoplay></video>
+        </div>
+        <button id="toggleVideo" class="accent">Start Video</button>
+        <div class="connecting">
+            Connecting...
+        </div>
+        <ul id="messageArea">
+        </ul>
+        <form id="messageForm" name="messageForm">
+            <div class="form-group">
+                <div class="input-group clearfix">
+                    <input type="text" id="message" placeholder="Type a message..." autocomplete="off"
+                           class="form-control"/>
+                    <button type="submit" class="primary">Send</button>
+                </div>
+            </div>
+        </form>
+        <button id="leaveButton" class="accent">Leave Room</button>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.1.4/sockjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+<script>
+    'use strict';
+
+    var usernamePage = document.querySelector('#username-page');
+    var chatPage = document.querySelector('#chat-page');
+    var usernameForm = document.querySelector('#usernameForm');
+    var messageForm = document.querySelector('#messageForm');
+    var messageInput = document.querySelector('#message');
+    var messageArea = document.querySelector('#messageArea');
+    var connectingElement = document.querySelector('.connecting');
+    var leaveButton = document.querySelector('#leaveButton');
+
+
+    var stompClient = null;
+    var username = null;
+    var roomId = null;
+
+    // VIDEO CALL CODE START
+    var localVideo = document.getElementById('localVideo');
+    var remoteVideo = document.getElementById('remoteVideo');
+    var conn = new WebSocket('ws://localhost:8080/ws_av');
+
+    conn.onopen = function () {
+        console.log("Connected to the signaling server");
+        initialize();
+    };
+
+    conn.onmessage = function (msg) {
+        console.log("Got message", msg);
+        var content = JSON.parse(msg.data);
+        var data = content.data;
+        switch (content.event) {
+            // when somebody wants to call us
+            case "offer":
+                handleOffer(data);
+                break;
+            case "answer":
+                handleAnswer(data);
+                break;
+            // when a remote peer sends an ice candidate to us
+            case "candidate":
+                handleCandidate(data);
+                break;
+            default:
+                break;
+        }
+    };
+
+    function send(message) {
+        conn.send(JSON.stringify(message));
+    }
+
+    var peerConnection;
+    var dataChannel;
+
+    function initialize() {
+
+        var configuration = {
+            iceServers: [
+                { urls: "stun:stun.l.google.com:19302" }, // Google's public STUN server
+                { urls: "stun:stun1.l.google.com:19302" }, // Additional Google's public STUN server
+                { urls: "stun:stun2.l.google.com:19302" } // Additional Google's public STUN server
+            ]
+        }
+
+        peerConnection = new RTCPeerConnection(configuration);
+
+        // Setup ice handling
+        peerConnection.onicecandidate = function (event) {
+            if (event.candidate) {
+                send({
+                    event: "candidate",
+                    data: event.candidate
+                });
+            }
+        };
+
+        // creating data channel
+        dataChannel = peerConnection.createDataChannel("dataChannel", {
+            reliable: true
+        });
+
+        dataChannel.onerror = function (error) {
+            console.log("Error occured on datachannel:", error);
+        };
+
+        // when we receive a message from the other peer, printing it on the console
+        dataChannel.onmessage = function (event) {
+            console.log("message:", event.data);
+        };
+
+        dataChannel.onclose = function () {
+            console.log("data channel is closed");
+        };
+
+        peerConnection.ondatachannel = function (event) {
+            dataChannel = event.channel;
+            console.log("Data channel is created!");
+        };
+
+        peerConnection.addEventListener(
+            "track",
+            (e) => {
+                console.log("remote track added");
+                remoteVideo.srcObject = e.streams[0];
+            },
+            false,
+        );
+
+    }
+
+    var isVideoEnabled = false; // Track video state
+    var localStream;
+    var isNegotiating = false;
+    async function startVideoStream() {
+        if (isVideoEnabled) return; // Don't start if already enabled
+        const constraints = {
+            video: true, audio: true
+        };
+        localStream = await navigator.mediaDevices.getUserMedia(constraints);
+        localVideo.srcObject = localStream;
+        peerConnection.onnegotiationneeded = (event)=>{
+            if(!isNegotiating) {
+                isNegotiating = true;
+                peerConnection.createOffer(function (offer) {
+                    send({
+                        event: "offer",
+                        data: offer,
+                        offerToReceiveAudio: 1,
+                        offerToReceiveVideo: 1
+                    });
+                    peerConnection.setLocalDescription(offer);
+                }, function (error) {
+                    alert("Error creating an offer");
+                });
+            }
+        }
+        localStream.getTracks().forEach(track => (peerConnection.addTrack(track, localStream)));
+        console.log("Track added");
+        sendAvMessage("aklsdjflajsl;djfl;ajsdl;k");
+    }
+
+    function stopVideoStream() {
+        if (!isVideoEnabled) return; // Don't stop if not enabled
+
+        localVideo.srcObject.getTracks().forEach(track => track.stop());
+        localVideo.srcObject = null;
+        isVideoEnabled = false;
+        toggleVideoButton.textContent = "Start Video";
+    }
+
+    // Get a reference to the button
+    var toggleVideoButton = document.getElementById('toggleVideo');
+
+    toggleVideoButton.addEventListener('click', function () {
+        if (isVideoEnabled) {
+            stopVideoStream();
+        } else {
+            startVideoStream();
+        }
+    });
+
+    function createOffer() {
+        peerConnection.createOffer(function (offer) {
+            send({
+                event: "offer",
+                data: offer,
+                offerToReceiveAudio: 1,
+                offerToReceiveVideo: 1
+            });
+            peerConnection.setLocalDescription(offer);
+        }, function (error) {
+            alert("Error creating an offer");
+        });
+    }
+
+    function handleOffer(offer) {
+        peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+
+        // create and send an answer to an offer
+        peerConnection.createAnswer(function (answer) {
+            peerConnection.setLocalDescription(answer);
+            send({
+                event: "answer",
+                data: answer
+            });
+        }, function (error) {
+            alert("Error creating an answer");
+        });
+
+    }
+
+    function handleCandidate(candidate) {
+        peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+    }
+
+    function handleAnswer(answer) {
+        peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+        console.log("connection established successfully!!");
+    }
+
+    function sendAvMessage(message) {
+        dataChannel.send(message);
+    }
+
+
+    // VIDEO CALL CODE END
+
+
+    function connect(event) {
+        username = document.querySelector('#name').value.trim();
+        roomId = document.querySelector('#roomID').value.trim(); // Fetch room ID entered by the user
+
+        if (username && roomId) {
+            usernamePage.classList.add('hidden');
+            chatPage.classList.remove('hidden');
+
+            var socket = new SockJS('/ws');
+            stompClient = Stomp.over(socket);
+
+            createOffer();
+
+            stompClient.connect({}, onConnected, onError);
+        }
+        event.preventDefault();
+    }
+
+    function onConnected() {
+        // Subscribe to the Room Topic
+        stompClient.subscribe('/topic/room/' + roomId, onMessageReceived); // Use the dynamic room ID entered by the user
+
+        // Tell your username to the server
+        var joinMessage = {
+            sender: username,
+            signalType: 'JOIN',
+            roomId: roomId // Use the dynamic room ID entered by the user
+        };
+        stompClient.send("/app/sendSignal", {}, JSON.stringify(joinMessage));
+
+        connectingElement.classList.add('hidden');
+    }
+
+    function onError(error) {
+        connectingElement.textContent = 'Could not connect to WebSocket server. Please refresh this page to try again!';
+        connectingElement.style.color = 'red';
+    }
+
+    function sendMessage(event) {
+        var messageContent = messageInput.value.trim();
+        console.log(messageContent);
+        if (messageContent && stompClient) {
+            var chatMessage = {
+                sender: username,
+                signalType: 'CHAT',
+                chatMessage: messageInput.value,
+                roomId: roomId // Use the dynamic room ID entered by the user
+            };
+            stompClient.send("/app/sendSignal", {}, JSON.stringify(chatMessage));
+            messageInput.value = '';
+        }
+        event.preventDefault();
+    }
+
+    function leaveRoom(event) {
+        var leaveMessage = {
+            sender: username,
+            signalType: 'LEAVE',
+            roomId: roomId // Use the dynamic room ID entered by the user
+        };
+        stompClient.send("/app/sendSignal", {}, JSON.stringify(leaveMessage));
+        stompClient.disconnect();
+        // Clear username and room ID and show username page
+        username = null;
+        roomId = null;
+        usernamePage.classList.remove('hidden');
+        chatPage.classList.add('hidden');
+        event.preventDefault();
+    }
+
+    function onMessageReceived(payload) {
+        var message = JSON.parse(payload.body);
+        var messageElement = document.createElement('li');
+        console.log("MESSAGE RECEIVED: ", message);
+        if (message.signalType === 'JOIN') {
+            messageElement.classList.add('event-message');
+            message.chatMessage = message.sender + ' joined the meet!';
+        } else if (message.signalType === 'LEAVE') {
+            messageElement.classList.add('event-message');
+
+            message.chatMessage = message.sender + ' left the meet!';
+        } else {
+            messageElement.classList.add('chat-message');
+            var usernameElement = document.createElement('span');
+            var usernameText = document.createTextNode(message.sender + ': ');
+            usernameElement.appendChild(usernameText);
+            messageElement.appendChild(usernameElement);
+        }
+
+        var textElement = document.createElement('span');
+        var messageText = document.createTextNode(message.chatMessage);
+        textElement.appendChild(messageText);
+        messageElement.appendChild(textElement);
+
+        messageArea.appendChild(messageElement);
+        messageArea.scrollTop = messageArea.scrollHeight;
+    }
+
+    usernameForm.addEventListener('submit', connect, true);
+    messageForm.addEventListener('submit', sendMessage, true);
+    leaveButton.addEventListener('click', leaveRoom, true);
+</script>
+</body>
+</html>

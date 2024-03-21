@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/.idea/E-COMMERCE.iml" filepath="$PROJECT_DIR$/.idea/E-COMMERCE.iml" />
+      <module fileurl="file://$PROJECT_DIR$/MeetingSignalingService/MeetingSignalingService.iml" filepath="$PROJECT_DIR$/MeetingSignalingService/MeetingSignalingService.iml" />
+      <module fileurl="file://$PROJECT_DIR$/Config Server/config-server.iml" filepath="$PROJECT_DIR$/Config Server/config-server.iml" />
+      <module fileurl="file://$PROJECT_DIR$/Discovery/discovery.iml" filepath="$PROJECT_DIR$/Discovery/discovery.iml" />
+      <module fileurl="file://$PROJECT_DIR$/Product Service/ecommerce.iml" filepath="$PROJECT_DIR$/Product Service/ecommerce.iml" />
+      <module fileurl="file://$PROJECT_DIR$/Gateway/gateway.iml" filepath="$PROJECT_DIR$/Gateway/gateway.iml" />
+      <module fileurl="file://$PROJECT_DIR$/User Service/users.iml" filepath="$PROJECT_DIR$/User Service/users.iml" />
+    </modules>
+  </component>
+</project>
