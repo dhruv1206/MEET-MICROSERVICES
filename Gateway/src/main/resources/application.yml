@@ -18,5 +18,15 @@ spring:
           uri: http://localhost:8090
           predicates:
             - Path=/api/v1/users/**
+#        - id: signaling
+#          uri: ws://localhost:8091
+#          predicates:
+#            - Path=/**
+#          filters:
+#            - StripPrefix=1
+        - id: frontend
+          uri: http://localhost:8092
+          predicates:
+            - Path=/meet/**
 
 

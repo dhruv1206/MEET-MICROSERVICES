@@ -1,5 +1,6 @@
 package com.meeting.MeetingSignalingService.signaling;
 
+import jakarta.inject.Singleton;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -12,6 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListSet;
 
 @Service
+@Singleton
 @RequiredArgsConstructor
 public class SignalingService {
 
@@ -20,6 +22,12 @@ public class SignalingService {
     final private SimpMessagingTemplate messagingTemplate;
 
     public void addUserToRoom(SignalingMessage message, SimpMessageHeaderAccessor headerAccessor) {
+        // if already 2 users in the room, reject the request
+        System.out.println("ROOMS: " + rooms);
+        if (rooms.computeIfAbsent(message.getRoomId(), k -> new ConcurrentSkipListSet<>()).size() >= 2) {
+            System.out.println("ROOM FULL");
+            return;
+        }
         System.out.println(message.getSender() +" JOINED THE ROOM " + message.getRoomId());
         Objects.requireNonNull(headerAccessor.getSessionAttributes()).put("username", message.getSender());
         Objects.requireNonNull(headerAccessor.getSessionAttributes()).put("roomId", message.getRoomId());
@@ -37,7 +45,6 @@ public class SignalingService {
     }
 
     public void broadcastChatMessage(SignalingMessage message, SimpMessageHeaderAccessor headerAccessor) {
-        // Add sender information to the message if needed
 
         messagingTemplate.convertAndSend("/topic/room/" + message.getRoomId(), message);
     }

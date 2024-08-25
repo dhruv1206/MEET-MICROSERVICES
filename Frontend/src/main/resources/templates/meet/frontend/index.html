@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
     <title>Spring Boot WebSocket Chat Application</title>
-    <link rel="stylesheet" href="/css/main.css"/>
+    <link rel="stylesheet" href="/meet/frontend/css/main.css"/>
 </head>
 <body>
 <noscript>
@@ -77,7 +77,8 @@
     // VIDEO CALL CODE START
     var localVideo = document.getElementById('localVideo');
     var remoteVideo = document.getElementById('remoteVideo');
-    var conn = new WebSocket('ws://localhost:8080/ws_av');
+    var conn = new WebSocket('ws://192.168.29.192:8091/ws_av');
+
 
     conn.onopen = function () {
         console.log("Connected to the signaling server");
@@ -127,6 +128,7 @@
         // Setup ice handling
         peerConnection.onicecandidate = function (event) {
             if (event.candidate) {
+                console.log(event, "ON ICE CANDIDATE RUN HUYA H");
                 send({
                     event: "candidate",
                     data: event.candidate
@@ -171,6 +173,8 @@
     var isVideoEnabled = false; // Track video state
     var localStream;
     var isNegotiating = false;
+
+
     async function startVideoStream() {
         if (isVideoEnabled) return; // Don't start if already enabled
         const constraints = {
@@ -195,10 +199,11 @@
             }
         }
         localStream.getTracks().forEach(track => (peerConnection.addTrack(track, localStream)));
+        toggleVideoButton.textContent = "Stop Video";
+        toggleVideoButton.style.backgroundColor = "red";
         console.log("Track added");
         sendAvMessage("aklsdjflajsl;djfl;ajsdl;k");
     }
-
     function stopVideoStream() {
         if (!isVideoEnabled) return; // Don't stop if not enabled
 
@@ -206,6 +211,48 @@
         localVideo.srcObject = null;
         isVideoEnabled = false;
         toggleVideoButton.textContent = "Start Video";
+    }
+
+    async function disableVideo() {
+        if (!isVideoEnabled) return; // Don't stop if not enabled
+        localStream.getTracks().forEach(track => track.enabled = false);
+        isVideoEnabled = false;
+        toggleVideoButton.textContent = "Start Video";
+    }
+    async function enableVideo() {
+        if (isVideoEnabled) return; // Don't start if already enabled
+        localStream.getTracks().forEach(track => track.enabled = true);
+        isVideoEnabled = true;
+        toggleVideoButton.textContent = "Stop Video";
+    }
+
+    async function toggleVideo() {
+        if (isVideoEnabled) {
+            await disableVideo();
+        } else {
+            await enableVideo();
+        }
+    }
+
+    async function disableAudio() {
+        if (!isVideoEnabled) return; // Don't stop if not enabled
+        localStream.getAudioTracks().forEach(track => track.enabled = false);
+        isVideoEnabled = false;
+        toggleVideoButton.textContent = "Start Video";
+    }
+    async function enableAudio() {
+        if (isVideoEnabled) return; // Don't start if already enabled
+        localStream.getAudioTracks().forEach(track => track.enabled = true);
+        isVideoEnabled = true;
+        toggleVideoButton.textContent = "Stop Video";
+    }
+
+    async function toggleAudio() {
+        if (isVideoEnabled) {
+            await disableAudio();
+        } else {
+            await enableAudio();
+        }
     }
 
     // Get a reference to the button
@@ -274,7 +321,7 @@
             usernamePage.classList.add('hidden');
             chatPage.classList.remove('hidden');
 
-            var socket = new SockJS('/ws');
+            var socket = new SockJS('http://192.168.29.192:8091/ws');
             stompClient = Stomp.over(socket);
 
             createOffer();
@@ -333,6 +380,10 @@
         roomId = null;
         usernamePage.classList.remove('hidden');
         chatPage.classList.add('hidden');
+        // CLear messages
+        messageArea.innerHTML = '';
+        // Stop video stream
+        stopVideoStream();
         event.preventDefault();
     }
 

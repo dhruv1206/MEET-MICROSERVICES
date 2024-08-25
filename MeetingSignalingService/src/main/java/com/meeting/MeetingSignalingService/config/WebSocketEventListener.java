@@ -1,6 +1,7 @@
 package com.meeting.MeetingSignalingService.config;
 import com.meeting.MeetingSignalingService.signaling.SignalType;
 import com.meeting.MeetingSignalingService.signaling.SignalingMessage;
+import com.meeting.MeetingSignalingService.signaling.SignalingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
@@ -15,6 +16,7 @@ import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 public class WebSocketEventListener {
 
     private final SimpMessageSendingOperations messagingTemplate;
+    private final SignalingService signalingService;
 
     @EventListener
     public void handleWebSocketDisconnectListener(SessionDisconnectEvent event) {
@@ -25,12 +27,15 @@ public class WebSocketEventListener {
         if (username != null) {
             log.info("user disconnected: {}", username);
             final String msg = username+ " left the meet!";
+            // Remove the user from the room
+
             final SignalingMessage signalingMessage = SignalingMessage.builder()
                     .sender(username)
+                    .roomId(roomId)
                     .signalType(SignalType.LEAVE)
                     .toastMessage(msg)
                     .chatMessage(msg).build();
-            messagingTemplate.convertAndSend("/topic/room/"+roomId, signalingMessage);
+            signalingService.removeUserFromRoom(signalingMessage, headerAccessor);
         }
     }
 

@@ -8,16 +8,18 @@
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
         <module name="config-server" />
+        <module name="Frontend" />
+        <module name="discovery" />
+        <module name="ecommerce" />
         <module name="MeetingSignalingService" />
         <module name="users" />
         <module name="gateway" />
-        <module name="discovery" />
-        <module name="ecommerce" />
       </profile>
     </annotationProcessing>
   </component>
   <component name="JavacSettings">
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="Frontend" options="-parameters" />
       <module name="MeetingSignalingService" options="-parameters" />
       <module name="config-server" options="-parameters" />
       <module name="discovery" options="-parameters" />
