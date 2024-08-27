@@ -14,7 +14,7 @@ public class WebConfig {
             @Override
             public void addCorsMappings(CorsRegistry registry) {
                 registry.addMapping("/**")
-                        .allowedOrigins("http://localhost:8222", "http://192.168.29.192:8222") // Allow your frontend URL
+                        .allowedOrigins("http://localhost:8222", "https://meet.dhruv-dev.studio") // Allow your frontend URL
                         .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                         .allowedHeaders("*")
                         .allowCredentials(true);

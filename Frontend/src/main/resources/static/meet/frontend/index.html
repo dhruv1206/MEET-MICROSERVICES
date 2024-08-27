@@ -2,7 +2,7 @@
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
-    <title>Spring Boot WebSocket Chat Application</title>
+    <title>Meet App by Dhruv</title>
     <link rel="stylesheet" href="/meet/frontend/css/main.css"/>
 </head>
 <body>
@@ -30,7 +30,7 @@
 <div id="chat-page" class="hidden">
     <div class="chat-container">
         <div class="chat-header">
-            <h2>Spring WebSocket Chat Demo - By Alibou</h2>
+            <h2>Meet App by Dhruv</h2>
         </div>
         <div id="video-container">
             <video id="localVideo" autoplay muted></video>
@@ -77,42 +77,65 @@
     // VIDEO CALL CODE START
     var localVideo = document.getElementById('localVideo');
     var remoteVideo = document.getElementById('remoteVideo');
-    var conn = new WebSocket('ws://localhost:8091/ws_av');
+    var conn;
+    var peerConnection;
+    var dataChannel;
+    var isVideoEnabled = false;
+    var localStream;
+    var isNegotiating = false;
+    var toggleVideoButton = document.getElementById('toggleVideo');
+    initializeWebSocket();
+    setupHtmlElementsListeners();
 
-
-    conn.onopen = function () {
-        console.log("Connected to the signaling server");
+    function handleRemoteVideoStopped() {
+        remoteVideo.srcObject.getTracks().forEach(track => {
+            track.stop();
+        });
+        remoteVideo.srcObject = null;
         initialize();
-    };
-
-    conn.onmessage = function (msg) {
-        console.log("Got message", msg);
-        var content = JSON.parse(msg.data);
-        var data = content.data;
-        switch (content.event) {
-            // when somebody wants to call us
-            case "offer":
-                handleOffer(data);
-                break;
-            case "answer":
-                handleAnswer(data);
-                break;
-            // when a remote peer sends an ice candidate to us
-            case "candidate":
-                handleCandidate(data);
-                break;
-            default:
-                break;
+        // initializeWebSocket();
+    }
+    function initializeWebSocket() {
+        if (conn && conn.readyState === WebSocket.OPEN) {
+            console.log("WebSocket is already open.");
+            return;
         }
-    };
-
+        conn = new WebSocket('wss://meet.dhruv-dev.studio/ws_av');
+        conn.onopen = function () {
+            console.log("Connected to the signaling server");
+            initialize();
+        };
+        conn.onmessage = function (msg) {
+            console.log("Got message", msg);
+            var content = JSON.parse(msg.data);
+            var data = content.data;
+            switch (content.event) {
+                // when somebody wants to call us
+                case "offer":
+                    handleOffer(data);
+                    break;
+                case "answer":
+                    handleAnswer(data);
+                    break;
+                // when a remote peer sends an ice candidate to us
+                case "candidate":
+                    handleCandidate(data);
+                    break;
+                case "stopVideo":
+                    handleRemoteVideoStopped(); // New function to handle stopping video
+                    break;
+                default:
+                    break;
+            }
+        };
+        conn.onclose = function () {
+            console.log("Connection closed");
+            initializeWebSocket();
+        };
+    }
     function send(message) {
         conn.send(JSON.stringify(message));
     }
-
-    var peerConnection;
-    var dataChannel;
-
     function initialize() {
 
         var configuration = {
@@ -169,18 +192,23 @@
         );
 
     }
-
-    var isVideoEnabled = false; // Track video state
-    var localStream;
-    var isNegotiating = false;
     async function startVideoStream() {
         if (isVideoEnabled) return; // Don't start if already enabled
+        if (conn.readyState !== WebSocket.OPEN) {
+            alert("Connection is not open yet. Please wait for a while and try again.");
+            initializeWebSocket();
+            return;
+        }
         const constraints = {
             video: true, audio: true
         };
         localStream = await navigator.mediaDevices.getUserMedia(constraints);
         localVideo.srcObject = localStream;
+        if (!peerConnection || peerConnection.iceConnectionState === "closed" || !peerConnection || dataChannel.readyState !== "open") {
+            initialize();
+        }
         peerConnection.onnegotiationneeded = (event)=>{
+            console.log("Negotiation needed", isNegotiating)
             if(!isNegotiating) {
                 isNegotiating = true;
                 peerConnection.createOffer(function (offer) {
@@ -191,36 +219,50 @@
                         offerToReceiveVideo: 1
                     });
                     peerConnection.setLocalDescription(offer);
+                    isNegotiating = false;
                 }, function (error) {
                     alert("Error creating an offer");
                 });
             }
         }
+
         localStream.getTracks().forEach(track => (peerConnection.addTrack(track, localStream)));
         console.log("Track added");
-        sendAvMessage("aklsdjflajsl;djfl;ajsdl;k");
+        sendAvMessage("Video Turned On by Remote User");
+        isVideoEnabled = true;
+        toggleVideoButton.textContent = "Stop Video";
     }
-
     function stopVideoStream() {
-        if (!isVideoEnabled) return; // Don't stop if not enabled
+        if (!isVideoEnabled) return;
 
-        localVideo.srcObject.getTracks().forEach(track => track.stop());
+        localStream.getTracks().forEach(track => {
+            peerConnection.getSenders().forEach(sender => {
+                if (sender.track === track) {
+                    peerConnection.removeTrack(sender);
+                }
+            });
+            track.stop();
+        });
+
         localVideo.srcObject = null;
         isVideoEnabled = false;
         toggleVideoButton.textContent = "Start Video";
+        send({ event: "stopVideo", data: {} });
+        initialize();
+        // initializeWebSocket();
     }
-
-    // Get a reference to the button
-    var toggleVideoButton = document.getElementById('toggleVideo');
-
-    toggleVideoButton.addEventListener('click', function () {
-        if (isVideoEnabled) {
-            stopVideoStream();
-        } else {
-            startVideoStream();
-        }
-    });
-
+    function setupHtmlElementsListeners() {
+        toggleVideoButton.addEventListener('click', function () {
+            if (isVideoEnabled) {
+                stopVideoStream();
+            } else {
+                startVideoStream();
+            }
+        });
+        usernameForm.addEventListener('submit', connect, true);
+        messageForm.addEventListener('submit', sendMessage, true);
+        leaveButton.addEventListener('click', leaveRoom, true);
+    }
     function createOffer() {
         peerConnection.createOffer(function (offer) {
             send({
@@ -234,10 +276,8 @@
             alert("Error creating an offer");
         });
     }
-
     function handleOffer(offer) {
         peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-
         // create and send an answer to an offer
         peerConnection.createAnswer(function (answer) {
             peerConnection.setLocalDescription(answer);
@@ -246,28 +286,21 @@
                 data: answer
             });
         }, function (error) {
+            console.log(error);
             alert("Error creating an answer");
         });
 
     }
-
     function handleCandidate(candidate) {
         peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
     }
-
     function handleAnswer(answer) {
         peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
         console.log("connection established successfully!!");
     }
-
     function sendAvMessage(message) {
         dataChannel.send(message);
     }
-
-
-    // VIDEO CALL CODE END
-
-
     function connect(event) {
         username = document.querySelector('#name').value.trim();
         roomId = document.querySelector('#roomID').value.trim(); // Fetch room ID entered by the user
@@ -276,7 +309,7 @@
             usernamePage.classList.add('hidden');
             chatPage.classList.remove('hidden');
 
-            var socket = new SockJS('http://localhost:8091/ws');
+            var socket = new SockJS('https://meet.dhruv-dev.studio/ws');
             stompClient = Stomp.over(socket);
 
             createOffer();
@@ -285,7 +318,6 @@
         }
         event.preventDefault();
     }
-
     function onConnected() {
         // Subscribe to the Room Topic
         stompClient.subscribe('/topic/room/' + roomId, onMessageReceived); // Use the dynamic room ID entered by the user
@@ -300,12 +332,10 @@
 
         connectingElement.classList.add('hidden');
     }
-
     function onError(error) {
         connectingElement.textContent = 'Could not connect to WebSocket server. Please refresh this page to try again!';
         connectingElement.style.color = 'red';
     }
-
     function sendMessage(event) {
         var messageContent = messageInput.value.trim();
         console.log(messageContent);
@@ -321,7 +351,6 @@
         }
         event.preventDefault();
     }
-
     function leaveRoom(event) {
         var leaveMessage = {
             sender: username,
@@ -341,7 +370,6 @@
         stopVideoStream();
         event.preventDefault();
     }
-
     function onMessageReceived(payload) {
         var message = JSON.parse(payload.body);
         var messageElement = document.createElement('li');
@@ -370,9 +398,7 @@
         messageArea.scrollTop = messageArea.scrollHeight;
     }
 
-    usernameForm.addEventListener('submit', connect, true);
-    messageForm.addEventListener('submit', sendMessage, true);
-    leaveButton.addEventListener('click', leaveRoom, true);
+
 </script>
 </body>
 </html>
